@@ -1,0 +1,69 @@
+name: iPXE Custom Build - BootNetTr Edition
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Bağımlılıkları Kur
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liblzma-dev mtools gcc binutils make perl libssl-dev
+        # iPXE derlemesi için gerekli paketler
+
+      - name: iPXE Kaynak Kodunu Çek
+        run: git clone https://github.com/ipxe/ipxe.git
+
+      - name: Protokolleri Yapılandır (HTTP, iSCSI, iBFT)
+        run: |
+          cd ipxe/src/config
+          # HTTP, iSCSI ve iBFT protokollerini aktif ediyoruz
+          sed -i 's|// *#define DOWNLOAD_PROTO_HTTP|#define DOWNLOAD_PROTO_HTTP|' general.h
+          sed -i 's|// *#define SANBOOT_PROTO_ISCSI|#define SANBOOT_PROTO_ISCSI|' general.h
+          sed -i 's|// *#define SANBOOT_PROTO_IBFT|#define SANBOOT_PROTO_IBFT|' general.h
+          # Konsol loglarını daha iyi görmek için (Opsiyonel)
+          sed -i 's|// *#define CONSOLE_FRAMEBUFFER|#define CONSOLE_FRAMEBUFFER|' console.h
+
+      - name: Gömülü Scripti Oluştur ve Derle
+        run: |
+          cd ipxe/src
+
+          # iPXE'nin kalbine gömülecek olan script
+          cat > embed.ipxe << 'EOF'
+          #!ipxe
+          
+          # DHCP isteği at
+          dhcp || goto dhcp_failed
+          
+          # HTTP üzerinden ana scripti çekmeye çalış
+          # ${next-server} senin BootNetTr sunucunun IP adresini temsil eder
+          chain http://${next-server}/boot.ipxe || goto chain_failed
+          
+          :dhcp_failed
+          echo DHCP Başarısız! Sistem yeniden başlatılıyor...
+          sleep 5
+          reboot
+          
+          :chain_failed
+          echo HTTP Chainloading Başarısız! Shell'e düşülüyor...
+          shell
+          EOF
+
+          # BIOS (Legacy) Derlemesi
+          make bin/undionly.kpxe EMBED=embed.ipxe || exit 1
+
+          # UEFI (x64) Derlemesi
+          make bin-x86_64-efi/ipxe.efi EMBED=embed.ipxe || exit 1
+
+      - name: Dosyaları Yükle (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipxe-custom-binaries
+          path: |
+            ipxe/src/bin/undionly.kpxe
+            ipxe/src/bin-x86_64-efi/ipxe.efi
+          if-no-files-found: error
