@@ -49,6 +49,7 @@ jobs:
       - name: BootNetTr Özel Gömülü Scriptini (embed.ipxe) Oluştur
         run: |
           cd ipxe-source/src
+          # iPXE'nin kalbine gömülecek olan script
           cat > embed.ipxe << 'EOF'
           #!ipxe
           
@@ -61,13 +62,13 @@ jobs:
           :retry_dhcp
           dhcp || goto retry_dhcp
           
-          echo ---------------------------------------------------
+          echo ===================================================
           echo [BASARILI] IP Alindi: ${ip}
           echo [BILGI] Yonlendirici Sunucu (Next-Server): ${next-server}
-          echo ---------------------------------------------------
+          echo ===================================================
           echo Ana konfigurasyon (boot.ipxe) HTTP uzerinden cekiliyor...
           
-          # BootNetTr HTTP sunucusuna (Aşama 4'te yapacağımız yer) bağlanır
+          # BootNetTr HTTP sunucusuna bağlanır
           chain http://${next-server}/boot.ipxe || goto hata
           
           :hata
